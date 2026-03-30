@@ -1,12 +1,8 @@
 import os
-import sys
+import argparse
 import assemblyai as aai
 from dotenv import load_dotenv
-
-if len(sys.argv) < 2:
-  print("Error: Debes proporcionar el nombre del archivo.")
-  print("Uso correcto: python test_assembly.py nombre_del_archivo.mp3")
-  sys.exit(1)
+import json
 
 load_dotenv()
 
@@ -17,35 +13,48 @@ if not api_key:
 
 aai.settings.api_key = api_key
 
-file_name = sys.argv[1]
-audio_file = os.path.join("inputs", file_name)
+parser = argparse.ArgumentParser(description="Transcriptor Pro con AssemblyAI")
+
+parser.add_argument("archivo", help="Nombre del archivo en la carpeta inputs/")
+
+parser.add_argument("-p", "--prompt",
+                    help="Instrucciones para identificar hablantes",
+                    default="Identifica a los hablantes en la conversación.")
+
+args = parser.parse_args()
+
+audio_file = os.path.join("inputs", args.archivo)
+file_without_ext = os.path.splitext(args.archivo)[0]
+
+output_dir = "outputs"
+output_file = os.path.join(output_dir, f"full_data_{file_without_ext}.json")
 
 if not os.path.exists(audio_file):
-  raise FileNotFoundError(f"No se encontró el archivo en: {audio_file}")
+  print(f"Error: No existe '{audio_file}'")
+  exit(1)
 
-file_without_ext = os.path.splitext(file_name)[0]
-output_dir = "outputs"
-output_file = os.path.join(output_dir, f"transcripcion_{file_without_ext}.txt")
+if not os.path.exists(output_dir):
+  os.makedirs(output_dir)
 
-# Uses universal-3-pro for en, es, de, fr, it, pt. Else uses universal-2 for support across all other languages
-config = aai.TranscriptionConfig(speech_models=["universal-3-pro", "universal-2"], language_detection=True)
+config = aai.TranscriptionConfig(
+  speech_models=["universal-3-pro", "universal-2"],
+  language_detection=True,
+  speaker_labels=True,
+  prompt=args.prompt
+)
 
 transcript = aai.Transcriber(config=config).transcribe(audio_file)
 
 if transcript.status == "error":
   raise RuntimeError(f"Transcription failed: {transcript.error}")
 
-if not os.path.exists(output_dir):
-  os.makedirs(output_dir)
-  print(f"Carpeta '{output_dir}' creada.")
-
 try:
-  with open(output_file, "w", encoding="utf-8") as f:
-    f.write(transcript.text)
+  full_data = transcript.json_response
 
-  print("-" * 30)
-  print(f"Transcripción guardada en: {output_file}")
-  print("-" * 30)
+  with open(output_file, "w", encoding="utf-8") as f:
+    json.dump(full_data, f, indent=4, ensure_ascii=False)
+
+  print(f"Datos completos guardados en: {output_file}")
 
 except Exception as e:
-  print(f"Error al escribir el archivo: {e}")
+  print(f"Error al guardar los datos completos: {e}")
