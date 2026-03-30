@@ -1,4 +1,4 @@
 .env
-.venv
-assets
-outputs
+.venv/
+inputs/*
+outputs/*
