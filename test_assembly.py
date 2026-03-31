@@ -21,32 +21,50 @@ parser.add_argument("-p", "--prompt",
                     help="Instrucciones para identificar hablantes",
                     default="Identifica a los hablantes en la conversación.")
 
+parser.add_argument("-d", "--dict",
+                    help="Palabras clave separadas por coma",
+                    default="")
+
 args = parser.parse_args()
 
-audio_file = os.path.join("inputs", args.archivo)
-file_without_ext = os.path.splitext(args.archivo)[0]
+input_value = args.archivo
+
+is_url = input_value.startswith(("http://", "https://"))
+
+if is_url:
+  audio_source = input_value
+  file_without_ext = "remote_audio_" + input_value.split("/")[-1][:20]
+else:
+  audio_source = os.path.join("inputs", input_value)
+  file_without_ext = os.path.splitext(input_value)[0]
+
+  if not os.path.exists(audio_source):
+    print(f"Error: El archivo local '{audio_source}' no existe.")
+    exit(1)
 
 output_dir = "outputs"
 output_file = os.path.join(output_dir, f"full_data_{file_without_ext}.json")
 
-if not os.path.exists(audio_file):
-  print(f"Error: No existe '{audio_file}'")
-  exit(1)
-
 if not os.path.exists(output_dir):
   os.makedirs(output_dir)
+
+word_boost = args.dict.split(",") if args.dict else []
 
 config = aai.TranscriptionConfig(
   speech_models=["universal-3-pro", "universal-2"],
   language_detection=True,
   speaker_labels=True,
-  prompt=args.prompt
+  prompt=args.prompt,
+  word_boost=word_boost,
+  boost_param="high"
 )
 
-transcript = aai.Transcriber(config=config).transcribe(audio_file)
+transcript = aai.Transcriber(config=config).transcribe(audio_source)
+
+print("Transcripción en progreso...")
 
 if transcript.status == "error":
-  raise RuntimeError(f"Transcription failed: {transcript.error}")
+  raise RuntimeError(f"Error en la transcripción: {transcript.error}")
 
 try:
   full_data = transcript.json_response
